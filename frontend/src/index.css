@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-navy-900 text-gray-100 antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-navy-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all duration-200 shadow-lg shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all duration-200 shadow-lg shadow-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white font-medium py-2.5 px-5 rounded-lg transition-all duration-200 border border-slate-600/50;
+  }
+  .card {
+    @apply bg-navy-800 border border-slate-700/60 rounded-xl p-6 shadow-2xl;
+  }
+  .card-glow {
+    @apply card shadow-[0_0_30px_rgba(59,130,246,0.08)];
+  }
+  .badge-clean {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/50 text-emerald-400 border border-emerald-700/50;
+  }
+  .badge-suspicious {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-900/50 text-amber-400 border border-amber-700/50;
+  }
+  .badge-high-risk {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-900/50 text-red-400 border border-red-700/50 animate-pulse;
+  }
+  .input-field {
+    @apply w-full bg-navy-700 border border-slate-600 rounded-lg px-4 py-2.5 text-gray-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-colors;
+  }
+  .alert-bar {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium;
+  }
+  .alert-red {
+    @apply alert-bar bg-red-950/50 border-red-800/60 text-red-300;
+  }
+  .alert-yellow {
+    @apply alert-bar bg-amber-950/50 border-amber-800/60 text-amber-300;
+  }
+  .alert-green {
+    @apply alert-bar bg-emerald-950/50 border-emerald-800/60 text-emerald-300;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .glow-red {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4), 0 0 60px rgba(239, 68, 68, 0.1);
+  }
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), 0 0 60px rgba(59, 130, 246, 0.08);
+  }
+}
+
+/* Animated background for admin panel */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Severity heatmap bar */
+.heatmap-bar {
+  background: linear-gradient(
+    to right,
+    #065f46 0%,
+    #854d0e 40%,
+    #7f1d1d 80%,
+    #ef4444 100%
+  );
+}
+
+/* Pulse ring for live indicator */
+@keyframes ping-slow {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+.ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
