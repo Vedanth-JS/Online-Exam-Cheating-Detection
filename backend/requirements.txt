@@ -1,13 +1,50 @@
-fastapi[all]
-sqlalchemy
-psycopg2-binary
-alembic
-python-jose[cryptography]
-passlib[bcrypt]
-celery
-redis
-google-generativeai
-python-multipart
-pydantic-settings
-jinja2
-python-dotenv
+# ─── Core API ─────────────────────────────────────────────────────────────────
+fastapi[all]==0.115.5
+uvicorn[standard]==0.32.1
+
+# ─── Database ────────────────────────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# ─── Settings ─────────────────────────────────────────────────────────────────
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+# ─── Async Redis ──────────────────────────────────────────────────────────────
+redis[asyncio]==5.2.1
+
+# ─── Celery ───────────────────────────────────────────────────────────────────
+celery==5.4.0
+
+# ─── ML — Computer Vision ─────────────────────────────────────────────────────
+opencv-python-headless==4.10.0.84
+ultralytics==8.3.50
+mediapipe==0.10.18
+
+# ─── ML — Audio ───────────────────────────────────────────────────────────────
+webrtcvad==2.0.10
+numpy==1.26.4
+
+# ─── AI — Gemini ──────────────────────────────────────────────────────────────
+google-generativeai==0.8.3
+
+# ─── PDF Reports ──────────────────────────────────────────────────────────────
+reportlab==4.2.5
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
+
+# ─── Linting ──────────────────────────────────────────────────────────────────
+ruff==0.8.4
+
+# ─── Other ────────────────────────────────────────────────────────────────────
+python-multipart==0.0.20
+jinja2==3.1.4

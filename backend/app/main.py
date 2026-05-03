@@ -1,26 +1,66 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from contextlib import asynccontextmanager
+import logging
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import auth, exams, proctor, admin
-from .db.base import engine, Base
 
-# Create tables (for development, better use Alembic in prod)
-Base.metadata.create_all(bind=engine)
+from .config import get_settings
+from .database import engine, Base
 
-app = FastAPI(title="Advanced AI Proctoring Platform")
+# Import all models so Alembic / Base.metadata sees them
+from .models import user, session, violation  # noqa: F401
+
+from .routers import auth, sessions, violations, proctor, reports
+from .websocket import session_ws, proctor_ws
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 ExamGuard API starting up...")
+    # Tables are managed by Alembic in production; create for dev convenience
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    logger.info("ExamGuard API shutting down...")
+    await engine.dispose()
+
+
+app = FastAPI(
+    title="ExamGuard AI Proctoring API",
+    description="Production-grade exam proctoring platform with real-time ML detection",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(exams.router, prefix="/exams", tags=["Exams"])
-app.include_router(proctor.router, prefix="/proctor", tags=["Proctoring"])
-app.include_router(admin.router, prefix="/admin", tags=["Admin"])
+# ─── Routers ─────────────────────────────────────────────────────────────────
+app.include_router(auth.router,       prefix="/auth",       tags=["Authentication"])
+app.include_router(sessions.router,   prefix="/sessions",   tags=["Sessions"])
+app.include_router(violations.router, prefix="/violations", tags=["Violations"])
+app.include_router(proctor.router,    prefix="/proctor",    tags=["Proctor"])
+app.include_router(reports.router,    prefix="/reports",    tags=["Reports"])
 
-@app.get("/")
+# ─── WebSocket routes ─────────────────────────────────────────────────────────
+app.include_router(session_ws.router,  tags=["WebSocket"])
+app.include_router(proctor_ws.router,  tags=["WebSocket"])
+
+
+@app.get("/", tags=["Health"])
 async def root():
-    return {"message": "Advanced Online Assessment API is live"}
+    return {"status": "ok", "service": "ExamGuard AI Proctoring API", "version": "2.0.0"}
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "healthy"}
