@@ -33,3 +33,8 @@ yarn-debug.log*
 yarn-error.log*
 C:\tmp\*
 *.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
