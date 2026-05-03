@@ -14,6 +14,14 @@ export default function AdminDashboard() {
   const [broadcastStatus, setBroadcastStatus] = useState(null)
   const [wsStatus, setWsStatus] = useState('connecting')
 
+  // AI Exam Generation State
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [examTopic, setExamTopic] = useState('')
+  const [examCount, setExamCount] = useState(5)
+  const [examDuration, setExamDuration] = useState(60)
+  const [generatedLink, setGeneratedLink] = useState('')
+
   // ─── Load active sessions ─────────────────────────────────────────────────
   const fetchSessions = useCallback(() => {
     fetch('/api/sessions/active')
@@ -93,6 +101,36 @@ export default function AdminDashboard() {
     setTimeout(() => setBroadcastStatus(null), 3000)
   }
 
+  // ─── Generate AI Exam ─────────────────────────────────────────────────────
+  const generateExam = async () => {
+    if (!examTopic.trim()) return
+    setIsGenerating(true)
+    setGeneratedLink('')
+    try {
+      const res = await fetch('/api/exams/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${examTopic} Assessment`,
+          description: `AI-generated exam evaluating proficiency in ${examTopic}.`,
+          topic: examTopic,
+          question_count: examCount,
+          duration_minutes: examDuration
+        })
+      })
+      const data = await res.json()
+      if (res.ok && data.exam_id) {
+        setGeneratedLink(`${window.location.origin}/exam/${data.exam_id}`)
+      } else {
+        alert("Generation failed.")
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Error generating exam.")
+    }
+    setIsGenerating(false)
+  }
+
   return (
     <div className="min-h-screen bg-navy-900 grid-bg">
       {/* Header */}
@@ -116,6 +154,9 @@ export default function AdminDashboard() {
               <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-400'}`} />
               <span className="text-slate-400 capitalize">{wsStatus}</span>
             </div>
+            <button onClick={() => setShowGenerateModal(true)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-lg shadow-indigo-900/20">
+              <span>✨</span> Generate AI Exam
+            </button>
             <button onClick={() => navigate('/')} className="btn-ghost text-sm py-2 px-3">← Home</button>
           </div>
         </div>
@@ -251,6 +292,82 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Generate AI Exam Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-navy-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-6">
+              <span>✨</span> Generate AI Exam
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Topic</label>
+                <input 
+                  type="text" 
+                  value={examTopic} 
+                  onChange={e => setExamTopic(e.target.value)} 
+                  placeholder="e.g. React.js, Cybersecurity, SQL" 
+                  className="input-field w-full"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Questions</label>
+                  <input 
+                    type="number" 
+                    value={examCount} 
+                    onChange={e => setExamCount(parseInt(e.target.value) || 5)} 
+                    className="input-field w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Duration (mins)</label>
+                  <input 
+                    type="number" 
+                    value={examDuration} 
+                    onChange={e => setExamDuration(parseInt(e.target.value) || 60)} 
+                    className="input-field w-full"
+                  />
+                </div>
+              </div>
+
+              {generatedLink && (
+                <div className="p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-lg">
+                  <p className="text-xs text-emerald-400 font-bold mb-1">Exam Generated Successfully!</p>
+                  <a href={generatedLink} target="_blank" rel="noreferrer" className="text-sm text-white hover:underline break-all">
+                    {generatedLink}
+                  </a>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-8">
+                <button 
+                  onClick={() => { setShowGenerateModal(false); setGeneratedLink(''); }} 
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  Close
+                </button>
+                <button 
+                  onClick={generateExam} 
+                  disabled={isGenerating || !examTopic.trim()}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold transition-colors flex justify-center items-center gap-2"
+                >
+                  {isGenerating ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

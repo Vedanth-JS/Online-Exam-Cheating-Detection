@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   * {
@@ -12,6 +12,11 @@
   body {
     @apply bg-navy-900 text-gray-100 antialiased;
     font-family: 'Inter', sans-serif;
+  }
+  
+  #root {
+    width: 100%;
+    min-height: 100vh;
   }
 
   ::-webkit-scrollbar {

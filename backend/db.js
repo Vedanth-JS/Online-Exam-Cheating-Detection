@@ -19,6 +19,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
       db.run(`CREATE TABLE IF NOT EXISTS exams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
+        description TEXT DEFAULT '',
         duration INTEGER NOT NULL, -- in minutes
         questions_json TEXT NOT NULL
       )`);
@@ -46,9 +47,36 @@ const db = new sqlite3.Database(dbPath, (err) => {
       )`);
       
       // Insert some seeded data for testing
-      db.run(`INSERT OR IGNORE INTO exams (id, title, duration, questions_json) VALUES (
-        1, 'Computer Science 101 Midterm', 60, '[{"id": 1, "text": "What does CPU stand for?", "type":"short_answer"}]'
-      )`);
+      const seedQuestions = JSON.stringify([
+        {
+          text: 'What does CPU stand for?',
+          options: ['Central Processing Unit', 'Central Program Utility', 'Computer Processing Unit', 'Core Processing Unit'],
+          correct_answer: 'Central Processing Unit'
+        },
+        {
+          text: 'Which data structure operates on a LIFO (Last In, First Out) principle?',
+          options: ['Queue', 'Stack', 'Linked List', 'Tree'],
+          correct_answer: 'Stack'
+        },
+        {
+          text: 'What is the time complexity of binary search?',
+          options: ['O(n)', 'O(n²)', 'O(log n)', 'O(1)'],
+          correct_answer: 'O(log n)'
+        },
+        {
+          text: 'Which of the following is NOT an object-oriented programming language?',
+          options: ['Java', 'Python', 'C', 'C++'],
+          correct_answer: 'C'
+        },
+        {
+          text: 'What does RAM stand for?',
+          options: ['Random Access Memory', 'Read Access Module', 'Rapid Application Memory', 'Read And Modify'],
+          correct_answer: 'Random Access Memory'
+        }
+      ]);
+      db.run(`INSERT OR IGNORE INTO exams (id, title, description, duration, questions_json) VALUES (
+        1, 'Computer Science 101 Midterm', 'A foundational exam covering core computer science concepts.', 60, ?)
+      `, [seedQuestions]);
       db.run(`INSERT OR IGNORE INTO students (id, name, email) VALUES (
         1, 'Test Student', 'test@example.com'
       )`);
