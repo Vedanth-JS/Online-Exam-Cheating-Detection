@@ -3,19 +3,18 @@ Tests for the violations API endpoints.
 Uses pytest-asyncio + httpx AsyncClient with mocked DB.
 """
 import uuid
-import pytest
-import pytest_asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from httpx import ASGITransport, AsyncClient
-
+import pytest
+import pytest_asyncio
 from app.database import get_db
 from app.main import app
 from app.models.user import Role, User
 from app.models.violation import ViolationType
 from app.services.auth_service import create_access_token
 from app.services.rbac import get_current_user
+from httpx import ASGITransport, AsyncClient
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
