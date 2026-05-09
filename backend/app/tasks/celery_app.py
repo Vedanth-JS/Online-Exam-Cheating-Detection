@@ -1,7 +1,9 @@
-from celery import Celery
 import os
-from ..db.base import SessionLocal
+
+from celery import Celery
+
 from ..db import models
+from ..db.base import SessionLocal
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 celery = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)

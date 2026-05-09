@@ -1,13 +1,13 @@
 from typing import Callable
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models.user import User, Role
+from ..models.user import Role, User
 from .auth_service import decode_token
 
 bearer_scheme = HTTPBearer()

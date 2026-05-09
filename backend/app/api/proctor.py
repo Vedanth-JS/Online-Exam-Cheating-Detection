@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, UploadFile, File
-from sqlalchemy.orm import Session
-from ..db import base, models
-from pydantic import BaseModel
 from typing import Optional
+
+from fastapi import APIRouter, Depends, File, UploadFile
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from ..db import base, models
 from ..tasks.celery_app import process_violation_snapshot
 
 router = APIRouter()

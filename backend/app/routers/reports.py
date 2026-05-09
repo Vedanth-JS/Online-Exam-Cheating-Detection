@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 import io
 
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..database import get_db
-from ..models.user import User, Role
 from ..models.session import ExamSession
+from ..models.user import Role, User
 from ..services.rbac import require_role
 from ..services.report_service import generate_ai_summary, generate_pdf_report
 from ..services.violation_scorer import get_session_risk

@@ -1,12 +1,13 @@
 import json
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
+
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
 
+from ..config import get_settings
+from ..database import AsyncSessionLocal
 from ..services.auth_service import decode_token
 from ..services.violation_scorer import get_session_risk
-from ..database import AsyncSessionLocal
-from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

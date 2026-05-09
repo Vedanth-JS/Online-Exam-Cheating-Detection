@@ -1,18 +1,30 @@
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models.user import User, Role
-from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest, UserResponse
+from ..models.user import Role, User
+from ..schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from ..services.auth_service import (
-    hash_password, verify_password,
-    create_access_token, create_refresh_token, decode_token,
-    store_refresh_token, validate_refresh_token, revoke_refresh_token,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    hash_password,
+    revoke_refresh_token,
+    store_refresh_token,
+    validate_refresh_token,
+    verify_password,
 )
 from ..services.rbac import get_current_user
-from jose import JWTError
 
 router = APIRouter()
 

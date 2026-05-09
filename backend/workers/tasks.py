@@ -10,7 +10,7 @@ from typing import Optional
 
 import redis
 from sqlalchemy import create_engine, func
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from workers.celery_app import celery_app
 
@@ -31,8 +31,9 @@ _sync_engine = create_engine(SYNC_DATABASE_URL, pool_pre_ping=True)
 SyncSession = sessionmaker(bind=_sync_engine)
 
 # Import models
-import sys  # noqa: E402
 import pathlib  # noqa: E402
+import sys  # noqa: E402
+
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 from app.models.violation import ViolationEvent, ViolationType  # noqa: E402
 

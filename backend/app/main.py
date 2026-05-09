@@ -1,18 +1,17 @@
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .database import engine, Base
+from .database import Base, engine
 
 # Import all models so Alembic / Base.metadata sees them
-from .models import user, session, violation  # noqa: F401
-
-from .routers import auth, sessions, violations, proctor, reports
-from .websocket import session_ws as session_ws_module
+from .models import session, user, violation  # noqa: F401
+from .routers import auth, proctor, reports, sessions, violations
 from .websocket import proctor_ws as proctor_ws_module
+from .websocket import session_ws as session_ws_module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

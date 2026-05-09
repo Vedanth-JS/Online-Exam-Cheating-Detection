@@ -1,4 +1,8 @@
 import asyncio
+import os
+
+# Load app settings
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -7,17 +11,14 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# Load app settings
-import sys
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.config import get_settings
 from app.database import Base
+from app.models.session import ExamSession  # noqa
 
 # Import all models so their tables are included in metadata
-from app.models.user import User          # noqa
-from app.models.session import ExamSession  # noqa
+from app.models.user import User  # noqa
 from app.models.violation import ViolationEvent  # noqa
 
 settings = get_settings()

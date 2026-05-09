@@ -6,8 +6,8 @@ import base64
 import logging
 from typing import Optional
 
-import numpy as np
 import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

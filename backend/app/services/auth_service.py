@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
+import redis.asyncio as aioredis
 from jose import jwt
 from passlib.context import CryptContext
-import redis.asyncio as aioredis
 
 from ..config import get_settings
 

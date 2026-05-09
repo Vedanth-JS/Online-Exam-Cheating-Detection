@@ -6,13 +6,13 @@ import io
 import logging
 from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.violation import ViolationEvent, ViolationType
+from ..config import get_settings
 from ..models.session import ExamSession
 from ..models.user import User
-from ..config import get_settings
+from ..models.violation import ViolationEvent, ViolationType
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -113,15 +113,20 @@ async def generate_pdf_report(session_id: str, db: AsyncSession) -> bytes:
     Generate a full PDF report using ReportLab.
     Returns the PDF as bytes.
     """
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.lib import colors
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
-    )
-    from reportlab.graphics.shapes import Drawing
     from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        HRFlowable,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
     # ── Fetch data ──
     sess_result = await db.execute(

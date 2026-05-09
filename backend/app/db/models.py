@@ -1,7 +1,19 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, JSON, Float, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from .base import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -12,7 +24,7 @@ class User(Base):
     role = Column(String)  # admin, examiner, candidate
     is_active = Column(Boolean, default=True)
     face_encoding = Column(JSON, nullable=True)  # Store face features for verification
-    
+
     attempts = relationship("ExamAttempt", back_populates="user")
 
 class Exam(Base):
@@ -24,7 +36,7 @@ class Exam(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     creator_id = Column(Integer, ForeignKey("users.id"))
     config = Column(JSON)  # Proctoring settings (lockdown, audio, etc.)
-    
+
     questions = relationship("Question", back_populates="exam")
     attempts = relationship("ExamAttempt", back_populates="exam")
 
@@ -37,7 +49,7 @@ class Question(Base):
     options = Column(JSON, nullable=True)
     correct_answer = Column(Text)
     points = Column(Integer, default=1)
-    
+
     exam = relationship("Exam", back_populates="questions")
 
 class ExamAttempt(Base):
@@ -49,7 +61,7 @@ class ExamAttempt(Base):
     score = Column(Float, nullable=True)
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
-    
+
     user = relationship("User", back_populates="attempts")
     exam = relationship("Exam", back_populates="attempts")
     violations = relationship("Violation", back_populates="attempt")
@@ -63,5 +75,5 @@ class Violation(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     snapshot_url = Column(String, nullable=True)
     metadata_info = Column(JSON, nullable=True)
-    
+
     attempt = relationship("ExamAttempt", back_populates="violations")

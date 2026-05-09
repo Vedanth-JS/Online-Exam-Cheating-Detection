@@ -1,8 +1,11 @@
-import uuid
 import enum
+import uuid
 from datetime import datetime
-from sqlalchemy import String, Float, Enum as SAEnum, ForeignKey, DateTime
+
+from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
+
 from ..database import Base
 
 

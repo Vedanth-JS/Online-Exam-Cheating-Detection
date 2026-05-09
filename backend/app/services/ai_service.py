@@ -1,6 +1,7 @@
-import google.generativeai as genai
-import os
 import json
+import os
+
+import google.generativeai as genai
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
@@ -29,7 +30,7 @@ async def generate_questions(topic: str, count: int = 5, difficulty: str = "medi
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        
+
         start = text.find('[')
         end = text.rfind(']') + 1
         return json.loads(text[start:end])
@@ -42,7 +43,7 @@ async def score_subjective_answer(question: str, user_answer: str, rubric: str =
     Question: {question}
     User Answer: {user_answer}
     Rubric: {rubric}
-    Score the answer out of 10 and provide a brief feedback. 
+    Score the answer out of 10 and provide a brief feedback.
     Format: {{"score": 8, "feedback": "Good explanation but missed X."}}
     """
     response = model.generate_content(prompt)

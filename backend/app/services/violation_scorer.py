@@ -1,7 +1,7 @@
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from ..models.violation import ViolationEvent, ViolationType
 
+from ..models.violation import ViolationEvent, ViolationType
 
 RISK_THRESHOLDS = {
     "LOW": (0, 2),

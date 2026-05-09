@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
-from jose import JWTError
-import redis.asyncio as aioredis
 
-from ..services.auth_service import decode_token
-from ..models.user import Role
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from jose import JWTError
+
 from ..config import get_settings
+from ..models.user import Role
+from ..services.auth_service import decode_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

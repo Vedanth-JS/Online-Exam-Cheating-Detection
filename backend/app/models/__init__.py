@@ -1,5 +1,5 @@
-from .user import User, Role
 from .session import ExamSession, SessionStatus
+from .user import Role, User
 from .violation import ViolationEvent, ViolationType
 
 __all__ = [

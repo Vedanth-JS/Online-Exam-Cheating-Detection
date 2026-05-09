@@ -1,11 +1,12 @@
 import uuid
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import List
 
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..database import get_db
-from ..models.user import User, Role
+from ..models.user import Role, User
 from ..models.violation import ViolationEvent
 from ..schemas.violation import ViolationCreate, ViolationResponse
 from ..services.rbac import require_role

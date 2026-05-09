@@ -1,5 +1,5 @@
 from .auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from .session import SessionCreate, SessionResponse, ActiveSessionResponse
+from .session import ActiveSessionResponse, SessionCreate, SessionResponse
 from .violation import ViolationCreate, ViolationResponse
 
 __all__ = [
