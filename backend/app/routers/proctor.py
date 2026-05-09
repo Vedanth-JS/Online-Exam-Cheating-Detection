@@ -2,16 +2,15 @@ from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 import redis.asyncio as aioredis
 import json
 
 from ..database import get_db
 from ..models.user import User, Role
 from ..models.session import ExamSession, SessionStatus
-from ..models.violation import ViolationEvent
 from ..schemas.session import ActiveSessionResponse
-from ..services.rbac import require_role, get_current_user
+from ..services.rbac import require_role
 from ..services.violation_scorer import get_session_risk
 from ..config import get_settings
 

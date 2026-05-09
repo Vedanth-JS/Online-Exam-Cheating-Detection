@@ -55,8 +55,8 @@ def _compute_gaze_direction(landmarks, img_w: int, img_h: int) -> tuple[str, flo
     """
     try:
         def lm(idx):
-            l = landmarks.landmark[idx]
-            return np.array([l.x * img_w, l.y * img_h])
+            pt = landmarks.landmark[idx]
+            return np.array([pt.x * img_w, pt.y * img_h])
 
         left_corner  = lm(33)
         right_corner = lm(263)

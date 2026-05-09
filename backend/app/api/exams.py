@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from ..db import base, models
 from ..services import ai_service
 from pydantic import BaseModel
-from typing import List
 
 router = APIRouter()
 

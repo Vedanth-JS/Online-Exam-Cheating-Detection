@@ -51,5 +51,5 @@ async def score_subjective_answer(question: str, user_answer: str, rubric: str =
         start = text.find('{')
         end = text.rfind('}') + 1
         return json.loads(text[start:end])
-    except:
+    except Exception:
         return {"score": 0, "feedback": "Failed to evaluate."}

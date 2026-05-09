@@ -5,10 +5,9 @@ Uses GEMINI_API_KEY from settings (same key as exam generation).
 import io
 import logging
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from ..models.violation import ViolationEvent, ViolationType
 from ..models.session import ExamSession
@@ -171,12 +170,12 @@ async def generate_pdf_report(session_id: str, db: AsyncSession) -> bytes:
     title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=16, spaceAfter=6)
     heading_style = ParagraphStyle("Heading2", parent=styles["Heading2"], fontSize=13, spaceBefore=12, spaceAfter=4)
     normal_style = styles["Normal"]
-    code_style = ParagraphStyle("Code", parent=styles["Normal"], fontName="Courier", fontSize=9, leading=14)
+    normal_style = styles["Normal"]
 
     story = []
 
     # Header
-    story.append(Paragraph(f"Proctoring Report", title_style))
+    story.append(Paragraph("Proctoring Report", title_style))
     story.append(Paragraph(f"{student.full_name} — {exam_date}", styles["Heading3"]))
     story.append(Paragraph(f"Session ID: {session_id}", normal_style))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.grey, spaceAfter=10))

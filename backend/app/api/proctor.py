@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from ..db import base, models
 from pydantic import BaseModel

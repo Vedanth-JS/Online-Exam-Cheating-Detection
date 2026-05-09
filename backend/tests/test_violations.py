@@ -62,7 +62,7 @@ async def test_create_violation(client):
 
     async def override_get_current_user():
         return MOCK_USER
-        
+
     async def override_get_db():
         mock_db = AsyncMock()
         mock_db.flush = AsyncMock()
@@ -104,7 +104,7 @@ async def test_list_violations(client):
 
     async def override_get_current_user():
         return MOCK_USER
-        
+
     async def override_get_db():
         mock_db = AsyncMock()
         mock_result = MagicMock()
