@@ -1,376 +1,492 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import ProctorView from '../components/ProctorView';
 import { useLockdown } from '../hooks/useLockdown';
 import { useAudioMonitor } from '../hooks/useAudioMonitor';
 
+const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+
 const ExamPage = () => {
-    const containerRef = useRef(null);
-    const { exam_id } = useParams();
-    const [searchParams] = useSearchParams();
-    const studentId = searchParams.get('student_id') || '1';
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const { exam_id } = useParams();
+  const [searchParams] = useSearchParams();
+  const studentId = searchParams.get('student_id') || '1';
 
-    const [examData, setExamData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [answers, setAnswers] = useState({});
-    const [timeLeft, setTimeLeft] = useState(3600);
-    const [isSubmitted, setIsSubmitted] = useState(false);
-    const [score, setScore] = useState(0);
-    const [violations, setViolations] = useState([]);
-    const [currentQuestion, setCurrentQuestion] = useState(0);
-    const [sessionId, setSessionId] = useState(null);
-    const wsRef = useRef(null);
+  const [examData, setExamData]     = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [answers, setAnswers]       = useState({});
+  const [timeLeft, setTimeLeft]     = useState(3600);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [violations, setViolations] = useState([]);
+  const [currentQ, setCurrentQ]    = useState(0);
+  const [sessionId, setSessionId]  = useState(null);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [adminAlert, setAdminAlert] = useState(null);
+  const wsRef = useRef(null);
 
-    // ─── Start session + fetch exam ─────────────────────────────────────────
-    useEffect(() => {
-        const init = async () => {
-            try {
-                // 1. Start proctoring session
-                const sessionRes = await fetch('/api/session/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ student_id: studentId, exam_id }),
-                });
-                const sessionData = await sessionRes.json();
-                if (sessionRes.ok && sessionData.sessionId) {
-                    setSessionId(sessionData.sessionId);
-                }
-
-                // 2. Fetch exam questions
-                const examRes = await fetch(`/api/exams/${exam_id}`);
-                const data = await examRes.json();
-                if (examRes.ok) {
-                    setExamData(data);
-                    setTimeLeft((data.duration_minutes || 60) * 60);
-                } else {
-                    alert('Exam not found!');
-                }
-            } catch (err) {
-                console.error('Failed to initialize exam', err);
-                alert('Could not connect to the server. Please check the backend is running.');
-            }
-            setLoading(false);
-        };
-        init();
-    }, [exam_id, studentId]);
-
-    // ─── WebSocket connection (student side) ────────────────────────────────
-    useEffect(() => {
-        if (!sessionId) return;
-        const ws = new WebSocket(`ws://localhost:3000?role=student&sessionId=${sessionId}`);
-        wsRef.current = ws;
-
-        ws.onmessage = (msg) => {
-            try {
-                const payload = JSON.parse(msg.data);
-                if (payload.type === 'admin_warning') {
-                    // Display admin warning as an overlay alert
-                    setViolations(prev => [{
-                        type: 'admin_warning',
-                        severity: 'high',
-                        message: `⚠ Admin Warning: ${payload.message}`,
-                        time: new Date()
-                    }, ...prev]);
-                }
-            } catch (_) {}
-        };
-
-        return () => ws.close();
-    }, [sessionId]);
-
-    // ─── Timer ──────────────────────────────────────────────────────────────
-    useEffect(() => {
-        if (!examData || timeLeft <= 0) return;
-        const timerId = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-        return () => clearInterval(timerId);
-    }, [examData, timeLeft]);
-
-    // Auto-submit when timer hits zero
-    useEffect(() => {
-        if (timeLeft === 0 && examData && !isSubmitted) {
-            handleSubmit();
-        }
-    }, [timeLeft]);
-
-    const formatTime = (seconds) => {
-        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const s = (seconds % 60).toString().padStart(2, '0');
-        return `${h}:${m}:${s}`;
+  // ── Init ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const [sessRes, examRes] = await Promise.all([
+          fetch('/api/session/start', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ student_id: studentId, exam_id }),
+          }),
+          fetch(`/api/exams/${exam_id}`),
+        ]);
+        const sessData = await sessRes.json();
+        const examD    = await examRes.json();
+        if (sessRes.ok && sessData.sessionId) setSessionId(sessData.sessionId);
+        if (examRes.ok) { setExamData(examD); setTimeLeft((examD.duration_minutes || 60) * 60); }
+        else alert('Exam not found!');
+      } catch {
+        alert('Could not connect to the server. Please check the backend is running.');
+      }
+      setLoading(false);
     };
+    init();
+  }, [exam_id, studentId]);
 
-    const isLowTime = timeLeft < 300; // last 5 minutes
-
-    const handleOptionSelect = (optionIndex) => {
-        setAnswers(prev => ({ ...prev, [currentQuestion]: optionIndex }));
+  // ── WebSocket ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sessionId) return;
+    const ws = new WebSocket(`ws://localhost:3000?role=student&sessionId=${sessionId}`);
+    wsRef.current = ws;
+    ws.onmessage = (msg) => {
+      try {
+        const p = JSON.parse(msg.data);
+        if (p.type === 'admin_warning') {
+          setAdminAlert(p.message);
+          setTimeout(() => setAdminAlert(null), 8000);
+          addViolation('admin_warning', 'high', `Admin: ${p.message}`);
+        }
+      } catch (_) {}
     };
+    return () => ws.close();
+  }, [sessionId]);
 
-    // ─── Log violation to backend ────────────────────────────────────────────
-    const logEventToBackend = useCallback(async (event_type, metadata = {}) => {
-        if (!sessionId) return;
-        try {
-            await fetch('/api/event/log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: sessionId, event_type, metadata }),
-            });
-            // Also push via WebSocket for instant admin visibility
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'event', event: { event_type, metadata, timestamp: new Date().toISOString() } }));
-            }
-        } catch (_) {}
-    }, [sessionId]);
+  // ── Timer ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!examData || timeLeft <= 0) return;
+    const t = setInterval(() => setTimeLeft(p => p - 1), 1000);
+    return () => clearInterval(t);
+  }, [examData, timeLeft]);
 
-    const handleViolation = useCallback((type, severity, message) => {
-        setViolations(prev => [{ type, severity, message, time: new Date() }, ...prev]);
-        logEventToBackend(type, { severity, message });
-    }, [logEventToBackend]);
+  useEffect(() => {
+    if (timeLeft === 0 && examData && !isSubmitted) handleSubmit();
+  }, [timeLeft]);
 
-    const { requestFullscreen, isFullscreen } = useLockdown(handleViolation, containerRef);
-    useAudioMonitor(handleViolation);
+  const fmt = (s) => {
+    const h = Math.floor(s / 3600).toString().padStart(2, '0');
+    const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+    const sec = (s % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${sec}`;
+  };
 
-    // ─── Submit exam ─────────────────────────────────────────────────────────
-    const handleSubmit = async () => {
-        if (isSubmitted) return;
+  // ── Violations ──────────────────────────────────────────────────────
+  const logEvent = useCallback(async (type, meta = {}) => {
+    if (!sessionId) return;
+    try {
+      await fetch('/api/event/log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, event_type: type, metadata: meta }),
+      });
+      if (wsRef.current?.readyState === WebSocket.OPEN)
+        wsRef.current.send(JSON.stringify({ type: 'event', event: { event_type: type, metadata: meta, timestamp: new Date().toISOString() } }));
+    } catch (_) {}
+  }, [sessionId]);
 
-        let calculatedScore = 0;
-        if (examData?.questions) {
-            examData.questions.forEach((q, i) => {
-                const selectedText = q.options?.[answers[i]];
-                if (selectedText === q.correct_answer) {
-                    calculatedScore += 1;
-                }
-            });
-        }
-        setScore(calculatedScore);
-        setIsSubmitted(true);
+  const addViolation = (type, severity, message) =>
+    setViolations(p => [{ type, severity, message, time: new Date() }, ...p]);
 
-        if (document.fullscreenElement) {
-            document.exitFullscreen().catch(() => {});
-        }
+  const handleViolation = useCallback((type, severity, message) => {
+    addViolation(type, severity, message);
+    logEvent(type, { severity, message });
+  }, [logEvent]);
 
-        // End session on backend
-        if (sessionId) {
-            try {
-                await fetch('/api/session/end', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId }),
-                });
-            } catch (_) {}
-        }
-    };
+  const { requestFullscreen, isFullscreen } = useLockdown(handleViolation, containerRef);
+  useAudioMonitor(handleViolation);
 
-    // ─── Render: Loading ─────────────────────────────────────────────────────
-    if (loading || !examData) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-                <div className="text-center space-y-4">
-                    <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-slate-400">Loading exam data...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // ─── Render: Submitted ───────────────────────────────────────────────────
-    if (isSubmitted) {
-        const total = examData.questions?.length || 1;
-
-        // Recalculate score from answers for the result screen
-        let finalScore = 0;
-        examData.questions?.forEach((q, i) => {
-            const selectedText = q.options?.[answers[i]];
-            if (selectedText === q.correct_answer) finalScore++;
+  // ── Submit ──────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (isSubmitted) return;
+    setIsSubmitted(true);
+    setShowSubmitModal(false);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (sessionId) {
+      try {
+        await fetch('/api/session/end', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
         });
-
-        const pct = Math.round((finalScore / total) * 100);
-        const grade = pct >= 80 ? '🏆 Excellent' : pct >= 60 ? '✅ Passed' : '⚠️ Needs Improvement';
-
-        return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
-                <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-12 max-w-md w-full text-center shadow-2xl">
-                    <div className="w-24 h-24 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <span className="text-5xl">🎯</span>
-                    </div>
-                    <h1 className="text-3xl font-bold mb-2">Exam Submitted!</h1>
-                    <p className="text-slate-400 mb-8">Your responses have been recorded and the session is closed.</p>
-
-                    <div className="bg-slate-800/50 rounded-2xl p-6 mb-4">
-                        <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Final Score</div>
-                        <div className="text-5xl font-bold text-blue-400 mb-2">{finalScore} <span className="text-2xl text-slate-500">/ {total}</span></div>
-                        <div className="text-slate-400 mb-1">{pct}% Accuracy</div>
-                        <div className="text-sm font-semibold mt-2">{grade}</div>
-                    </div>
-
-                    <div className="text-xs text-slate-600 mb-6">
-                        {violations.length} violation{violations.length !== 1 ? 's' : ''} logged during session
-                    </div>
-
-                    <button
-                        onClick={() => window.location.href = '/'}
-                        className="w-full py-4 bg-slate-800 hover:bg-slate-700 transition-colors rounded-xl font-bold uppercase tracking-widest"
-                    >
-                        Return to Home
-                    </button>
-                </div>
-            </div>
-        );
+      } catch (_) {}
     }
+  };
 
-    const questions = examData.questions || [];
+  // ── Score ───────────────────────────────────────────────────────────
+  const calcScore = () => {
+    let s = 0;
+    examData?.questions?.forEach((q, i) => {
+      if (q.options?.[answers[i]] === q.correct_answer) s++;
+    });
+    return s;
+  };
 
-    // ─── Render: Fullscreen gate ─────────────────────────────────────────────
-    return (
-        <div ref={containerRef} className="min-h-screen bg-slate-950 text-slate-100 flex p-6 gap-6 overflow-y-auto">
-            {!isFullscreen ? (
-                <div className="flex-1 flex flex-col items-center justify-center">
-                    <div className="max-w-md text-center space-y-6">
-                        <div className="w-16 h-16 bg-red-900/20 border border-red-800/40 rounded-2xl flex items-center justify-center mx-auto">
-                            <span className="text-3xl">🔒</span>
-                        </div>
-                        <h2 className="text-3xl font-bold text-red-400">Security Check Required</h2>
-                        <p className="text-slate-400">To maintain exam integrity, this exam must be taken in fullscreen mode. Your browser activity is being monitored.</p>
-                        <button
-                            onClick={requestFullscreen}
-                            className="w-full py-4 bg-red-600 hover:bg-red-700 transition-colors rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-red-900/20"
-                        >
-                            Enter Lockdown Mode
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <>
-                    {/* Left Sidebar — Proctoring */}
-                    <div className="w-80 flex flex-col gap-6 shrink-0">
-                        <ProctorView onViolation={handleViolation} />
+  const isLowTime   = timeLeft < 300;
+  const isCritical  = timeLeft < 60;
+  const questions   = examData?.questions || [];
+  const answered    = Object.keys(answers).length;
+  const progress    = questions.length ? Math.round((answered / questions.length) * 100) : 0;
+  const highViolations = violations.filter(v => v.severity === 'high').length;
 
-                        {/* Question Navigator */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
-                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Questions</h3>
-                            <div className="grid grid-cols-5 gap-2">
-                                {questions.map((_, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setCurrentQuestion(i)}
-                                        className={`h-9 w-full rounded-lg text-xs font-bold transition-all ${
-                                            i === currentQuestion
-                                                ? 'bg-blue-600 text-white'
-                                                : answers[i] !== undefined
-                                                    ? 'bg-emerald-900/60 border border-emerald-700/50 text-emerald-300'
-                                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                                        }`}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="mt-3 text-xs text-slate-500">
-                                {Object.keys(answers).length} / {questions.length} answered
-                            </div>
-                        </div>
-
-                        {/* Integrity Feed */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex-1 overflow-auto">
-                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Integrity Feed</h3>
-                            <div className="space-y-2">
-                                {violations.slice().reverse().map((v, i) => (
-                                    <div key={i} className="text-xs p-2.5 bg-red-900/10 border border-red-900/30 rounded-lg">
-                                        <span className="text-red-400 font-bold block">{v.type.replace(/_/g, ' ')}</span>
-                                        <p className="text-slate-400 mt-0.5">{v.message}</p>
-                                    </div>
-                                ))}
-                                {violations.length === 0 && <p className="text-xs text-slate-500 italic">No violations detected.</p>}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Main Question Area */}
-                    <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-3xl p-10 flex flex-col shadow-2xl">
-                        {/* Header */}
-                        <div className="flex justify-between items-center mb-8">
-                            <div>
-                                <h1 className="text-2xl font-bold">{examData.title}</h1>
-                                <p className="text-slate-400 text-sm mt-1">{examData.description}</p>
-                            </div>
-                            <div className={`px-5 py-2 rounded-full font-mono border ${
-                                isLowTime
-                                    ? 'bg-red-900/30 border-red-700 text-red-400 animate-pulse'
-                                    : 'bg-slate-800 border-slate-700 text-slate-300'
-                            }`}>
-                                {formatTime(timeLeft)}
-                            </div>
-                        </div>
-
-                        {/* Question */}
-                        <div className="flex-1 select-none">
-                            <div className="flex items-center gap-3 mb-3">
-                                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">
-                                    Question {currentQuestion + 1} of {questions.length}
-                                </span>
-                                {answers[currentQuestion] !== undefined && (
-                                    <span className="text-xs text-emerald-400">✓ Answered</span>
-                                )}
-                            </div>
-                            <h2 className="text-xl font-medium mb-8 leading-relaxed">
-                                {questions[currentQuestion]?.text}
-                            </h2>
-
-                            <div className="grid grid-cols-1 gap-3">
-                                {(questions[currentQuestion]?.options || []).map((opt, i) => {
-                                    const isSelected = answers[currentQuestion] === i;
-                                    return (
-                                        <button
-                                            key={i}
-                                            onClick={() => handleOptionSelect(i)}
-                                            className={`w-full text-left p-5 rounded-2xl border-2 transition-all group ${
-                                                isSelected
-                                                    ? 'bg-blue-900/30 border-blue-500 shadow-lg shadow-blue-900/20'
-                                                    : 'bg-slate-800/50 border-transparent hover:bg-slate-800 hover:border-slate-600'
-                                            }`}
-                                        >
-                                            <span className={`inline-block w-8 font-bold ${isSelected ? 'text-blue-400' : 'text-slate-500 group-hover:text-blue-400'}`}>
-                                                {String.fromCharCode(65 + i)}.
-                                            </span>
-                                            {opt}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Navigation */}
-                        <div className="mt-8 flex justify-between gap-4">
-                            <button
-                                className="px-8 py-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors text-slate-400 disabled:opacity-30"
-                                disabled={currentQuestion === 0}
-                                onClick={() => setCurrentQuestion(q => q - 1)}
-                            >
-                                ← Previous
-                            </button>
-                            <div className="flex gap-3">
-                                {currentQuestion < questions.length - 1 ? (
-                                    <button
-                                        className="px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-700 transition-colors font-bold"
-                                        onClick={() => setCurrentQuestion(q => q + 1)}
-                                    >
-                                        Save & Next →
-                                    </button>
-                                ) : (
-                                    <button
-                                        className="px-8 py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-colors font-bold"
-                                        onClick={handleSubmit}
-                                    >
-                                        Submit Exam ✓
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+  // ── Loading ─────────────────────────────────────────────────────────
+  if (loading || !examData) return (
+    <div className="min-h-screen hex-bg flex items-center justify-center">
+      <div className="text-center space-y-4">
+        <div className="relative w-16 h-16 mx-auto">
+          <div className="w-16 h-16 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+          <div className="absolute inset-2 border-2 border-purple-500/20 border-b-purple-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
         </div>
+        <p className="text-slate-400 heading font-semibold">Initializing Secure Exam Environment…</p>
+        <p className="text-xs text-slate-600">Connecting to proctoring service</p>
+      </div>
+    </div>
+  );
+
+  // ── Submitted ───────────────────────────────────────────────────────
+  if (isSubmitted) {
+    const total = questions.length || 1;
+    const finalScore = calcScore();
+    const pct   = Math.round((finalScore / total) * 100);
+    const grade = pct >= 80 ? { label: 'Excellent', icon: '🏆', color: 'text-emerald-400', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.3)' }
+                : pct >= 60 ? { label: 'Passed',    icon: '✅', color: 'text-blue-400',    bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.3)' }
+                :              { label: 'Needs Work', icon: '📚', color: 'text-amber-400',   bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.3)' };
+
+    return (
+      <div className="min-h-screen hex-bg flex items-center justify-center p-6">
+        <div className="max-w-lg w-full space-y-4 fade-in">
+          {/* Score card */}
+          <div className="card-glow text-center py-10">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center text-5xl"
+              style={{ background: grade.bg, border: `2px solid ${grade.border}` }}>
+              {grade.icon}
+            </div>
+            <h1 className="text-3xl font-black heading text-white mb-1">Exam Submitted</h1>
+            <p className="text-slate-500 text-sm mb-8">Session closed · Results recorded</p>
+
+            {/* Score ring */}
+            <div className="relative w-36 h-36 mx-auto mb-6">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#0f2344" strokeWidth="10" />
+                <circle cx="50" cy="50" r="42" fill="none" stroke={grade.border} strokeWidth="10"
+                  strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 42}`}
+                  strokeDashoffset={`${2 * Math.PI * 42 * (1 - pct / 100)}`}
+                  style={{ transition: 'stroke-dashoffset 1.5s ease' }} />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className={`text-3xl font-black heading ${grade.color}`}>{pct}%</span>
+                <span className="text-xs text-slate-500">{finalScore}/{total}</span>
+              </div>
+            </div>
+
+            <p className={`text-xl font-bold heading ${grade.color} mb-1`}>{grade.label}</p>
+            <p className="text-xs text-slate-600">{violations.length} integrity event{violations.length !== 1 ? 's' : ''} logged</p>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Score', value: `${finalScore}/${total}`, color: grade.color },
+              { label: 'Answered', value: `${answered}/${total}` },
+              { label: 'Violations', value: violations.length, color: violations.length > 0 ? 'text-red-400' : 'text-emerald-400' },
+            ].map(({ label, value, color = 'text-white' }) => (
+              <div key={label} className="glass p-4 text-center rounded-2xl">
+                <p className={`text-2xl font-black heading ${color}`}>{value}</p>
+                <p className="text-xs text-slate-500 mt-1">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => navigate('/')} className="btn-ghost w-full py-4 text-base font-bold">
+            ← Return to Home
+          </button>
+        </div>
+      </div>
     );
+  }
+
+  // ── Fullscreen Gate ─────────────────────────────────────────────────
+  return (
+    <div ref={containerRef} className="min-h-screen hex-bg text-slate-100 flex overflow-hidden" style={{ height: '100vh' }}>
+
+      {/* Admin alert banner */}
+      {adminAlert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 slide-in">
+          <div className="flex items-center gap-3 px-6 py-3 rounded-2xl border border-red-500/40 text-red-200 text-sm font-semibold shadow-2xl"
+            style={{ background: 'rgba(127,29,29,0.9)', backdropFilter: 'blur(20px)' }}>
+            <span className="text-lg animate-pulse">🚨</span>
+            {adminAlert}
+            <button onClick={() => setAdminAlert(null)} className="ml-2 text-red-300 hover:text-white">✕</button>
+          </div>
+        </div>
+      )}
+
+      {!isFullscreen ? (
+        /* ── Fullscreen required gate ─────────────────────────────── */
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="max-w-md w-full text-center space-y-6 fade-in">
+            <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center text-4xl"
+              style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+              🔒
+            </div>
+            <div>
+              <h2 className="text-3xl font-black heading text-red-400 mb-2">Secure Mode Required</h2>
+              <p className="text-slate-400 leading-relaxed">
+                This exam runs in fullscreen lockdown mode. Tab switching, copy-paste, and window focus
+                events are monitored and reported to the proctor.
+              </p>
+            </div>
+            <div className="glass p-4 rounded-2xl text-left space-y-2">
+              {[
+                ['🎥', 'Webcam is being recorded'],
+                ['🎙', 'Audio activity is monitored'],
+                ['🖥', 'Tab switches are flagged'],
+                ['📋', 'Copy/paste is blocked'],
+              ].map(([icon, text]) => (
+                <div key={text} className="flex items-center gap-3 text-sm text-slate-400">
+                  <span>{icon}</span><span>{text}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={requestFullscreen} className="btn-danger w-full py-4 text-base font-bold flex items-center justify-center gap-2">
+              🔒 Enter Lockdown Mode
+            </button>
+            <p className="text-xs text-slate-600">Exam: {examData?.title} · {questions.length} questions · {examData?.duration_minutes} min</p>
+          </div>
+        </div>
+
+      ) : (
+        /* ── Exam interface ─────────────────────────────────────────── */
+        <div className="flex w-full h-full overflow-hidden">
+
+          {/* ── Left sidebar ─────────────────────────────────────────── */}
+          <div className="w-72 flex-shrink-0 flex flex-col gap-3 p-4 border-r border-white/5 overflow-y-auto"
+            style={{ background: 'rgba(6,13,26,0.95)' }}>
+
+            {/* Exam info */}
+            <div className="glass p-3 rounded-xl">
+              <p className="text-xs text-slate-500 mb-0.5">Exam</p>
+              <p className="font-bold text-white text-sm heading truncate">{examData?.title}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="badge-info text-xs">● LIVE</span>
+                {highViolations > 0 && <span className="badge-risk text-xs">{highViolations} flags</span>}
+              </div>
+            </div>
+
+            {/* Timer */}
+            <div className={`p-4 rounded-xl border text-center ${
+              isCritical ? 'border-red-500/50 animate-pulse' : isLowTime ? 'border-amber-500/40' : 'border-white/10'
+            }`} style={{ background: isCritical ? 'rgba(127,29,29,0.4)' : isLowTime ? 'rgba(120,53,15,0.3)' : 'rgba(255,255,255,0.04)' }}>
+              <p className="text-xs text-slate-500 mb-1">Time Remaining</p>
+              <p className={`text-3xl font-black mono ${isCritical ? 'text-red-400' : isLowTime ? 'text-amber-400' : 'text-white'}`}>
+                {fmt(timeLeft)}
+              </p>
+              {isLowTime && <p className="text-xs text-amber-400 mt-1">⚠ Time running out</p>}
+            </div>
+
+            {/* Progress */}
+            <div className="glass p-3 rounded-xl">
+              <div className="flex justify-between text-xs text-slate-500 mb-2">
+                <span>Progress</span><span>{answered}/{questions.length}</span>
+              </div>
+              <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-slate-600 mt-1">{progress}% complete</p>
+            </div>
+
+            {/* Question navigator */}
+            <div className="glass p-3 rounded-xl flex-shrink-0">
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Questions</p>
+              <div className="grid grid-cols-5 gap-1.5">
+                {questions.map((_, i) => (
+                  <button key={i} onClick={() => setCurrentQ(i)}
+                    className={`h-8 rounded-lg text-xs font-bold transition-all ${
+                      i === currentQ
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
+                        : answers[i] !== undefined
+                          ? 'text-emerald-300'
+                          : 'text-slate-500 hover:text-white'
+                    }`}
+                    style={{
+                      background: i === currentQ ? undefined : answers[i] !== undefined
+                        ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${i === currentQ ? 'transparent' : answers[i] !== undefined ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                    }}>
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Webcam */}
+            <div className="flex-shrink-0">
+              <ProctorView onViolation={handleViolation} />
+            </div>
+
+            {/* Violations feed */}
+            <div className="flex-1 glass p-3 rounded-xl overflow-hidden flex flex-col min-h-0">
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 flex-shrink-0">
+                Integrity Log · <span className={violations.length > 0 ? 'text-red-400' : 'text-emerald-400'}>{violations.length}</span>
+              </p>
+              <div className="overflow-y-auto space-y-1.5 flex-1">
+                {violations.length === 0 ? (
+                  <p className="text-xs text-emerald-500 italic">✓ No violations</p>
+                ) : violations.map((v, i) => (
+                  <div key={i} className="text-xs p-2 rounded-lg"
+                    style={{ background: v.severity === 'high' ? 'rgba(127,29,29,0.4)' : 'rgba(120,53,15,0.3)', borderLeft: `2px solid ${v.severity === 'high' ? '#ef4444' : '#f59e0b'}` }}>
+                    <p className={`font-bold ${v.severity === 'high' ? 'text-red-400' : 'text-amber-400'}`}>
+                      {v.type.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-slate-400 text-xs mt-0.5 truncate">{v.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Main exam area ────────────────────────────────────────── */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-8 py-3 border-b border-white/5 flex-shrink-0"
+              style={{ background: 'rgba(6,13,26,0.9)' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-xs font-black">EG</div>
+                <span className="font-bold heading text-white">{examData?.title}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-slate-500">Student #{studentId}</span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-red-400 font-semibold">MONITORED</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Question content */}
+            <div className="flex-1 overflow-y-auto px-10 py-8">
+              <div className="max-w-3xl mx-auto">
+                {/* Question header */}
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0">
+                    {currentQ + 1}
+                  </span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Question {currentQ + 1} of {questions.length}</span>
+                      {answers[currentQ] !== undefined && (
+                        <span className="text-xs text-emerald-400 font-semibold">● Answered</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Question text */}
+                <h2 className="text-xl font-semibold text-white leading-relaxed mb-8 select-none">
+                  {questions[currentQ]?.text}
+                </h2>
+
+                {/* Options */}
+                <div className="space-y-3 select-none">
+                  {(questions[currentQ]?.options || []).map((opt, i) => {
+                    const isSelected = answers[currentQ] === i;
+                    return (
+                      <button key={i} onClick={() => setAnswers(p => ({ ...p, [currentQ]: i }))}
+                        className="w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 group"
+                        style={{
+                          background: isSelected ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                          borderColor: isSelected ? '#3b82f6' : 'rgba(255,255,255,0.08)',
+                          boxShadow: isSelected ? '0 0 20px rgba(59,130,246,0.2)' : 'none',
+                        }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                        <div className="flex items-center gap-4">
+                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${
+                            isSelected ? 'bg-blue-600 text-white' : 'text-slate-500 group-hover:text-white'
+                          }`} style={{ background: isSelected ? undefined : 'rgba(255,255,255,0.06)' }}>
+                            {OPTION_LABELS[i]}
+                          </span>
+                          <span className={`font-medium transition-colors ${isSelected ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
+                            {opt}
+                          </span>
+                          {isSelected && (
+                            <span className="ml-auto text-blue-400 flex-shrink-0">✓</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom nav bar */}
+            <div className="flex items-center justify-between px-10 py-4 border-t border-white/5 flex-shrink-0"
+              style={{ background: 'rgba(6,13,26,0.95)' }}>
+              <button disabled={currentQ === 0} onClick={() => setCurrentQ(q => q - 1)}
+                className="btn-ghost py-2.5 px-6 disabled:opacity-30 flex items-center gap-2">
+                ← Previous
+              </button>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-600">{answered} of {questions.length} answered</span>
+                {currentQ < questions.length - 1 ? (
+                  <button onClick={() => setCurrentQ(q => q + 1)}
+                    className="btn-primary py-2.5 px-6 flex items-center gap-2">
+                    Next →
+                  </button>
+                ) : (
+                  <button onClick={() => setShowSubmitModal(true)}
+                    className="btn-success py-2.5 px-6 flex items-center gap-2">
+                    Submit Exam ✓
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Submit confirmation modal ──────────────────────────────── */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className="card-glow max-w-sm w-full text-center space-y-5 fade-in">
+            <div className="text-4xl">📋</div>
+            <div>
+              <h3 className="text-xl font-black heading text-white mb-1">Submit Exam?</h3>
+              <p className="text-slate-400 text-sm">
+                You've answered <span className="text-white font-bold">{answered}/{questions.length}</span> questions.
+                This cannot be undone.
+              </p>
+            </div>
+            {answered < questions.length && (
+              <div className="alert-yellow text-xs">
+                ⚠ {questions.length - answered} question{questions.length - answered !== 1 ? 's' : ''} unanswered
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setShowSubmitModal(false)} className="btn-ghost flex-1 py-3">Cancel</button>
+              <button onClick={handleSubmit} className="btn-success flex-1 py-3 font-bold">Confirm Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default ExamPage;

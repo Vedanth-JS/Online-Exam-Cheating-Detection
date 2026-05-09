@@ -11,7 +11,8 @@ from .database import engine, Base
 from .models import user, session, violation  # noqa: F401
 
 from .routers import auth, sessions, violations, proctor, reports
-from .websocket import session_ws, proctor_ws
+from .websocket import session_ws as session_ws_module
+from .websocket import proctor_ws as proctor_ws_module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,8 +53,8 @@ app.include_router(proctor.router,    prefix="/proctor",    tags=["Proctor"])
 app.include_router(reports.router,    prefix="/reports",    tags=["Reports"])
 
 # ─── WebSocket routes ─────────────────────────────────────────────────────────
-app.include_router(session_ws.router,  tags=["WebSocket"])
-app.include_router(proctor_ws.router,  tags=["WebSocket"])
+app.include_router(session_ws_module.router, tags=["WebSocket"])
+app.include_router(proctor_ws_module.router, tags=["WebSocket"])
 
 
 @app.get("/", tags=["Health"])

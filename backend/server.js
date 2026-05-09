@@ -48,35 +48,58 @@ async function generateQuestionsWithGemini(topic, count) {
 
   if (!genAI) return useMock('no API key');
 
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const prompt = `Generate exactly ${count} multiple-choice questions on the topic: "${topic}".
-Return ONLY a valid JSON array, no markdown, no code blocks, no explanation.
-Each object must have these exact keys:
-  "text": (string) the question,
-  "options": (array of 4 strings) the answer choices,
-  "correct_answer": (string) must exactly match one of the options.
+  const prompt = `Generate exactly ${count} multiple-choice questions about: "${topic}".
+Return ONLY a raw JSON array. No markdown, no code blocks, no extra text.
+Each item MUST have:
+  "text": the question string,
+  "options": array of exactly 4 answer strings,
+  "correct_answer": one of the 4 options exactly as written.
 
-Example format:
+Example:
 [{"text":"What is X?","options":["A","B","C","D"],"correct_answer":"A"}]`;
 
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+  // Try with retry on rate limit (up to 2 short attempts)
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      // gemini-2.0-flash is the correct model for this API key
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent(prompt);
+      const raw = result.response.text().trim();
 
-    // Strip markdown code fences if present
-    const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-    const questions = JSON.parse(jsonStr);
+      // Strip all markdown code fences (```json ... ``` or ``` ... ```)
+      const jsonStr = raw
+        .replace(/^```(?:json)?\s*/im, '')
+        .replace(/\s*```\s*$/m, '')
+        .trim();
 
-    if (!Array.isArray(questions) || questions.length === 0) {
-      return useMock('invalid Gemini response format');
+      const questions = JSON.parse(jsonStr);
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return useMock('invalid Gemini response format');
+      }
+      console.log(`✅ Gemini generated ${questions.length} questions for "${topic}" (attempt ${attempt})`);
+      return { questions, source: 'gemini', rateLimited: false };
+
+    } catch (err) {
+      const isRateLimit = err.status === 429;
+      if (isRateLimit && attempt < 2) {
+        // Parse retryDelay from error message (e.g. "retryDelay: 59s")
+        const retryMs = parseInt((err.message || '').match(/(\d+)s/)?.[1] || '5') * 1000;
+        const delay = Math.min(retryMs, 8000); // cap at 8s
+        console.warn(`Gemini rate limit hit (attempt ${attempt}), retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      const reason = isRateLimit ? 'rate limit' : err.message;
+      console.warn(`Gemini call failed (${reason}), using mock fallback`);
+      const mock = useMock(reason);
+      return { ...mock, rateLimited: isRateLimit };
     }
-    return { questions, source: 'gemini' };
-  } catch (err) {
-    const reason = err.status === 429 ? 'rate limit exceeded' : err.message;
-    console.warn(`Gemini call failed (${reason}), using mock fallback`);
-    return useMock(reason);
   }
+  const mock = useMock('max retries exceeded');
+  return { ...mock, rateLimited: true };
 }
+
 
 // ─── Express App ──────────────────────────────────────────────────────────────
 const app = express();
@@ -150,6 +173,16 @@ wss.on('connection', (ws, req) => {
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
+// GET / — health check
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'ExamGuard Node.js Backend',
+    version: '1.0.0',
+    fastapi: 'http://localhost:8000/docs',
+  });
+});
+
 // POST /api/session/start
 app.post('/api/session/start', (req, res) => {
   const { student_id, exam_id } = req.body;
@@ -222,7 +255,7 @@ app.get('/api/exam/:id', (req, res) => {
   });
 });
 
-// POST /api/exams/generate  ← NEW — Admin AI exam generation
+// POST /api/exams/generate  — Admin AI exam generation
 app.post('/api/exams/generate', async (req, res) => {
   const { title, description, topic, question_count = 5, duration_minutes = 60 } = req.body;
 
@@ -231,7 +264,7 @@ app.post('/api/exams/generate', async (req, res) => {
   }
 
   try {
-    const { questions, source } = await generateQuestionsWithGemini(topic, question_count);
+    const { questions, source, rateLimited } = await generateQuestionsWithGemini(topic, question_count);
     const questionsJson = JSON.stringify(questions);
     const examDescription = description || `AI-generated exam on ${topic}.`;
     const isAI = source === 'gemini';
@@ -248,9 +281,12 @@ app.post('/api/exams/generate', async (req, res) => {
           duration_minutes,
           question_count: questions.length,
           source,
+          rate_limited: rateLimited || false,
           message: isAI
             ? `✨ Exam generated with Gemini AI (${questions.length} questions)`
-            : `📋 Exam created with sample questions (Gemini rate limit — try again in 1 min)`
+            : rateLimited
+              ? `⚠️ Gemini API quota reached — exam created with ${questions.length} sample questions. Your API quota resets every minute. Try again shortly.`
+              : `📋 Exam created with ${questions.length} sample questions`
         });
       }
     );
@@ -368,6 +404,100 @@ app.post('/api/admin/broadcast', (req, res) => {
   } else {
     res.status(404).json({ error: 'Student not connected' });
   }
+});
+
+// ─── Coding Arena API ────────────────────────────────────────────────────────
+const { CODING_PROBLEMS, LANG_IDS, runWithJudge0, getStarterCode } = require('./coding-problems');
+
+// GET /api/code/problems
+app.get('/api/code/problems', (req, res) => {
+  res.json(CODING_PROBLEMS.map(({ id, title, difficulty, tags }) => ({ id, title, difficulty, tags })));
+});
+
+// GET /api/code/problems/:id
+app.get('/api/code/problems/:id', (req, res) => {
+  const p = CODING_PROBLEMS.find(p => p.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'Problem not found' });
+  // Don't send hidden tests to client
+  const { hiddenTests, ...safe } = p;
+  // Generate starter code for all supported languages
+  safe.starterCode = Object.keys(LANG_IDS).reduce((acc, lang) => {
+    acc[lang] = getStarterCode(p, lang);
+    return acc;
+  }, {});
+  res.json(safe);
+});
+
+// POST /api/code/run  — run code against sample test cases via Judge0
+app.post('/api/code/run', async (req, res) => {
+  const { code, language, problemId, customInput } = req.body;
+  const problem = CODING_PROBLEMS.find(p => p.id === problemId);
+  const testCases = problem ? problem.testCases : [];
+
+  if (customInput !== undefined) {
+    // Raw run with custom input
+    const result = await runWithJudge0(code, language, customInput);
+    return res.json({ stdout: result.stdout || '', stderr: result.stderr || '', status: result.status });
+  }
+
+  // Run all public test cases sequentially
+  const results = [];
+  for (let i = 0; i < testCases.length; i++) {
+    const tc = testCases[i];
+    const r = await runWithJudge0(code, language, tc.stdin);
+    const passed = r.status === 'ok' && (r.stdout || '').trim() === (tc.expected || '').trim();
+    results.push({
+      id: i + 1,
+      input: tc.stdin,
+      expected: tc.expected,
+      actual: r.status === 'ok' ? r.stdout : null,
+      error: r.stderr,
+      passed,
+      status: r.status === 'ok' ? (passed ? 'accepted' : 'wrong_answer') : r.status,
+    });
+    // Stop early on compilation error
+    if (r.status === 'compile_error') break;
+  }
+
+  res.json({ results, passed: results.filter(r => r.passed).length, total: results.length });
+});
+
+// POST /api/code/submit — run against ALL test cases including hidden via Judge0
+app.post('/api/code/submit', async (req, res) => {
+  const { code, language, problemId, sessionId } = req.body;
+  const problem = CODING_PROBLEMS.find(p => p.id === problemId);
+  if (!problem) return res.status(404).json({ error: 'Problem not found' });
+
+  const allTests = [...problem.testCases, ...problem.hiddenTests];
+  const results = [];
+  
+  for (let i = 0; i < allTests.length; i++) {
+    const tc = allTests[i];
+    const r = await runWithJudge0(code, language, tc.stdin);
+    const passed = r.status === 'ok' && (r.stdout || '').trim() === (tc.expected || '').trim();
+    const isHidden = i >= problem.testCases.length;
+    
+    results.push({
+      id: i + 1,
+      passed,
+      status: r.status === 'ok' ? (passed ? 'accepted' : 'wrong_answer') : r.status,
+      hidden: isHidden,
+      error: isHidden ? null : r.stderr,
+    });
+    // Stop early on compilation error
+    if (r.status === 'compile_error') break;
+  }
+
+  const passedCount = results.filter(r => r.passed).length;
+  const score = Math.round((passedCount / allTests.length) * 100);
+  const verdict = score === 100 ? 'Accepted' : score >= 50 ? 'Partial' : 'Wrong Answer';
+
+  if (sessionId) {
+    db.run(`INSERT INTO events (session_id, event_type, metadata) VALUES (?, ?, ?)`,
+      [sessionId, 'code_submitted', JSON.stringify({ problemId, language, score, verdict })], () => {});
+  }
+
+  res.json({ results, passed: passedCount, total: allTests.length, score, verdict });
 });
 
 const PORT = process.env.PORT || 3000;
