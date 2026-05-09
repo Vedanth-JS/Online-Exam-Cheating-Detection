@@ -9,24 +9,27 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
 
 from app.main import app
+from app.models.user import User, Role
 from app.models.violation import ViolationType
 from app.services.auth_service import create_access_token
 from app.services.rbac import get_current_user
 from app.database import get_db
 
 
-# ─── Fixtures ────────────────────────────────────────────────────────────────
+# ─── Fixtures ──────────────────────────────────────────────────────────
 
 STUDENT_TOKEN = create_access_token({"sub": str(uuid.uuid4()), "role": "STUDENT"})
-PROCTOR_TOKEN = create_access_token({"sub": str(uuid.uuid4()), "role": "PROCTOR"})
 TEST_SESSION_ID = str(uuid.uuid4())
 TEST_VIOLATION_ID = str(uuid.uuid4())
 
-MOCK_USER = MagicMock()
-MOCK_USER.id = str(uuid.uuid4())
-MOCK_USER.role = MagicMock()
-MOCK_USER.role.value = "STUDENT"
-MOCK_USER.is_active = True
+
+def _mock_user() -> User:
+    """Create a mock user with STUDENT role."""
+    user = MagicMock(spec=User)
+    user.id = str(uuid.uuid4())
+    user.role = Role.STUDENT
+    user.is_active = True
+    return user
 
 
 def _mock_violation(session_id: str = TEST_SESSION_ID) -> MagicMock:
@@ -59,9 +62,10 @@ async def client():
 async def test_create_violation(client):
     """POST /violations should create and return a ViolationEvent."""
     mock_violation = _mock_violation()
+    mock_user = _mock_user()
 
     async def override_get_current_user():
-        return MOCK_USER
+        return mock_user
 
     async def override_get_db():
         mock_db = AsyncMock()
@@ -69,11 +73,12 @@ async def test_create_violation(client):
         mock_db.add = MagicMock()
         yield mock_db
 
+    # Set overrides BEFORE making the request
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        # Patch ViolationEvent constructor side effect to return mock
+        # Patch ViolationEvent constructor to return mock
         with patch("app.routers.violations.ViolationEvent", return_value=mock_violation):
             response = await client.post(
                 "/violations",
@@ -86,7 +91,7 @@ async def test_create_violation(client):
                 headers={"Authorization": f"Bearer {STUDENT_TOKEN}"},
             )
 
-        assert response.status_code == 201
+        assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
         data = response.json()
         assert data["session_id"] == TEST_SESSION_ID
         assert data["type"] == "GAZE"
@@ -101,9 +106,10 @@ async def test_create_violation(client):
 async def test_list_violations(client):
     """GET /violations/{session_id} should return a list of violations."""
     mock_violation = _mock_violation()
+    mock_user = _mock_user()
 
     async def override_get_current_user():
-        return MOCK_USER
+        return mock_user
 
     async def override_get_db():
         mock_db = AsyncMock()
@@ -112,6 +118,7 @@ async def test_list_violations(client):
         mock_db.execute = AsyncMock(return_value=mock_result)
         yield mock_db
 
+    # Set overrides BEFORE making the request
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_db] = override_get_db
 
@@ -121,7 +128,7 @@ async def test_list_violations(client):
             headers={"Authorization": f"Bearer {STUDENT_TOKEN}"},
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert isinstance(data, list)
         assert len(data) == 1
@@ -130,7 +137,7 @@ async def test_list_violations(client):
         app.dependency_overrides.clear()
 
 
-# ─── Test: Unauthenticated request returns 401 ────────────────────────────────
+# ─── Test: Unauthenticated request returns 403 ────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_unauthenticated_request(client):
