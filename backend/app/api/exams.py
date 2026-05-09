@@ -19,7 +19,7 @@ async def create_ai_exam(exam_data: ExamCreate, db: Session = Depends(base.get_d
     questions = await ai_service.generate_questions(exam_data.topic, exam_data.question_count)
     if not questions:
         raise HTTPException(status_code=500, detail="Failed to generate questions")
-    
+
     # 2. Create exam in DB
     new_exam = models.Exam(
         title=exam_data.title,
@@ -30,7 +30,7 @@ async def create_ai_exam(exam_data: ExamCreate, db: Session = Depends(base.get_d
     db.add(new_exam)
     db.commit()
     db.refresh(new_exam)
-    
+
     # 3. Add questions to DB
     for q in questions:
         db_q = models.Question(
@@ -42,7 +42,7 @@ async def create_ai_exam(exam_data: ExamCreate, db: Session = Depends(base.get_d
             points=q.get('points', 1)
         )
         db.add(db_q)
-    
+
     db.commit()
     return {"exam_id": new_exam.id, "question_count": len(questions)}
 
@@ -51,7 +51,7 @@ def get_exam(exam_id: int, db: Session = Depends(base.get_db)):
     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
-    
+
     return {
         "id": exam.id,
         "title": exam.title,
