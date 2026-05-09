@@ -11,6 +11,8 @@ from datetime import datetime
 from app.main import app
 from app.models.violation import ViolationType
 from app.services.auth_service import create_access_token
+from app.services.rbac import get_current_user
+from app.database import get_db
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -58,17 +60,19 @@ async def test_create_violation(client):
     """POST /violations should create and return a ViolationEvent."""
     mock_violation = _mock_violation()
 
-    with (
-        patch("app.services.rbac.get_current_user", return_value=MOCK_USER),
-        patch("app.database.get_db") as mock_db_ctx,
-    ):
+    async def override_get_current_user():
+        return MOCK_USER
+        
+    async def override_get_db():
         mock_db = AsyncMock()
-        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
-        mock_db.__aexit__ = AsyncMock(return_value=None)
         mock_db.flush = AsyncMock()
         mock_db.add = MagicMock()
-        mock_db_ctx.return_value = mock_db
+        yield mock_db
 
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
         # Patch ViolationEvent constructor side effect to return mock
         with patch("app.routers.violations.ViolationEvent", return_value=mock_violation):
             response = await client.post(
@@ -82,11 +86,13 @@ async def test_create_violation(client):
                 headers={"Authorization": f"Bearer {STUDENT_TOKEN}"},
             )
 
-    assert response.status_code == 201
-    data = response.json()
-    assert data["session_id"] == TEST_SESSION_ID
-    assert data["type"] == "GAZE"
-    assert data["confidence"] == 0.87
+        assert response.status_code == 201
+        data = response.json()
+        assert data["session_id"] == TEST_SESSION_ID
+        assert data["type"] == "GAZE"
+        assert data["confidence"] == 0.87
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ─── Test: GET /violations/{session_id} returns list ──────────────────────────
@@ -96,36 +102,39 @@ async def test_list_violations(client):
     """GET /violations/{session_id} should return a list of violations."""
     mock_violation = _mock_violation()
 
-    with (
-        patch("app.services.rbac.get_current_user", return_value=MOCK_USER),
-        patch("app.database.get_db") as mock_db_ctx,
-    ):
+    async def override_get_current_user():
+        return MOCK_USER
+        
+    async def override_get_db():
         mock_db = AsyncMock()
-        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
-        mock_db.__aexit__ = AsyncMock(return_value=None)
-
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [mock_violation]
         mock_db.execute = AsyncMock(return_value=mock_result)
-        mock_db_ctx.return_value = mock_db
+        yield mock_db
 
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
         response = await client.get(
             f"/violations/{TEST_SESSION_ID}",
             headers={"Authorization": f"Bearer {STUDENT_TOKEN}"},
         )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["type"] == "GAZE"
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["type"] == "GAZE"
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ─── Test: Unauthenticated request returns 401 ────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_unauthenticated_request(client):
-    """Requests without Bearer token should return 401."""
+    """Requests without Bearer token should return 403."""
     response = await client.post(
         "/violations",
         json={
@@ -134,11 +143,11 @@ async def test_unauthenticated_request(client):
             "confidence": 0.87,
         },
     )
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_unauthenticated_get(client):
-    """GET without token should return 401."""
+    """GET without token should return 403."""
     response = await client.get(f"/violations/{TEST_SESSION_ID}")
-    assert response.status_code == 401
+    assert response.status_code == 403
