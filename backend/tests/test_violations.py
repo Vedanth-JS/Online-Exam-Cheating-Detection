@@ -3,10 +3,11 @@ Tests for the violations API endpoints.
 Uses pytest-asyncio + httpx AsyncClient with mocked DB.
 """
 import uuid
+import pytest
+import pytest_asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.database import get_db
@@ -48,7 +49,7 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
